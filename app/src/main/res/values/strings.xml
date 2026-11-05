@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Pad Overlay</string>
+    <string name="service_desc">Turns your gamepad buttons (and optional on-screen buttons) into taps on PS Remote Play\'s on-screen controller. It reads gamepad key presses and performs touch gestures. It does not read screen content.</string>
+</resources>
