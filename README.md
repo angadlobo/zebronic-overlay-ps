@@ -8,7 +8,8 @@ and turns each controller button into a tap on Remote Play's own on-screen butto
 ## How it works
 - An **Accessibility service** reads your gamepad buttons and performs touch gestures (multi-finger, so you can hold a stick and press ✕ at the same time).
 - A **mapping overlay** lets you drag an amber ✛ onto each Remote Play button and bind a controller button to it.
-- **Press any button on the controller** and the overlay hides itself, saves, and you're playing. Tap the floating 🎮 bubble to bring the overlay back.
+- **Press any button on the controller** and the overlay hides itself, saves, and you're playing.
+- **Floating 🎮 bubble:** tap to turn Pad Overlay on or off (green = on, grey with a red slash = off), hold to bring the mapping overlay back, drag to move it. There's the same on/off switch in the app.
 - Optional: on-screen touch buttons you can move and resize anywhere (Settings → "Also show on-screen touch buttons").
 
 ## Build the APK

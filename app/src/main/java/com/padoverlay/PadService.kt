@@ -7,11 +7,14 @@ import android.graphics.PixelFormat
 import android.graphics.Point
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Button
@@ -19,6 +22,7 @@ import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 
 class PadService : AccessibilityService() {
 
@@ -47,9 +51,17 @@ class PadService : AccessibilityService() {
     private var editorView: EditorView? = null
 
     /** True when presses should be turned into taps (overlay hidden, in Remote Play). */
-    val playing: Boolean get() = editor == null && shouldShow()
+    val playing: Boolean get() = editor == null && prefs.active && shouldShow()
 
     private fun shouldShow() = prefs.alwaysShow || inTargetApp
+
+    /** Turn the whole overlay on or off (the bubble stays so it can be turned back on). */
+    fun setActive(on: Boolean) {
+        prefs.active = on
+        Toast.makeText(this, if (on) "Pad Overlay on" else "Pad Overlay off", Toast.LENGTH_SHORT).show()
+        // This is called from the bubble's own touch event, and refresh() replaces the bubble.
+        Handler(Looper.getMainLooper()).post { refresh() }
+    }
 
     // ---------- lifecycle ----------
 
@@ -59,6 +71,8 @@ class PadService : AccessibilityService() {
         gamepad = Gamepad(this, injector)
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         instance = this
+        // The service can (re)start while Remote Play is already open, with no window event to tell us.
+        inTargetApp = rootInActiveWindow?.packageName?.toString() in prefs.packageSet()
         refresh()
     }
 
@@ -161,8 +175,10 @@ class PadService : AccessibilityService() {
         gamepad.releaseAll()
         if (!shouldShow()) return
         measure()
-        addCatcher()
-        if (prefs.touchButtons && !touchHidden) addTouchButtons()
+        if (prefs.active) {
+            addCatcher()
+            if (prefs.touchButtons && !touchHidden) addTouchButtons()
+        }
         addHandle()
     }
 
@@ -194,13 +210,13 @@ class PadService : AccessibilityService() {
     private fun addHandle() {
         val size = (40 * density).toInt()
         lateinit var lp: WindowManager.LayoutParams
-        val v = HandleView(this, onTap = { openEditor() }, onMoved = { rx, ry ->
+        val v = HandleView(this, prefs.active, onTap = { setActive(!prefs.active) }, onLongPress = { openEditor() }, onMoved = { rx, ry ->
             lp.x = (rx - size / 2).coerceIn(0, sw - size)
             lp.y = (ry - size / 2).coerceIn(0, sh - size)
             prefs.handleX = lp.x / sw.toFloat(); prefs.handleY = lp.y / sh.toFloat()
             handle?.let { try { wm.updateViewLayout(it, lp) } catch (_: Exception) {} }
         })
-        v.alpha = 0.8f
+        v.alpha = if (prefs.active) 0.8f else 0.55f
         val x = (prefs.handleX * sw).toInt().coerceIn(0, sw - size)
         val y = (prefs.handleY * sh).toInt().coerceIn(0, sh - size)
         lp = params(size, size, x, y)
@@ -231,7 +247,21 @@ class PadService : AccessibilityService() {
         val bar = buildToolbar(ev)
         root.addView(bar, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             Gravity.TOP or Gravity.CENTER_HORIZONTAL))
-        wm.addView(root, params(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, 0, 0))
+        val lp = params(sw, sh, 0, 0)
+        // This window sits above the system bars: step out of the way whenever the nav bar is
+        // showing so Back/Home/Recents stay usable. (Full size otherwise, to reach edge targets.)
+        if (Build.VERSION.SDK_INT >= 30) root.setOnApplyWindowInsetsListener { _, insets ->
+            val nav = insets.getInsets(WindowInsets.Type.navigationBars())
+            val w = sw - nav.left - nav.right
+            val h = sh - nav.top - nav.bottom
+            if (lp.x != nav.left || lp.y != nav.top || lp.width != w || lp.height != h) {
+                lp.x = nav.left; lp.y = nav.top; lp.width = w; lp.height = h
+                try { wm.updateViewLayout(root, lp) } catch (_: Exception) {}
+                ev.invalidate()
+            }
+            insets
+        }
+        wm.addView(root, lp)
         editor = root
         editorView = ev
         addCatcher()

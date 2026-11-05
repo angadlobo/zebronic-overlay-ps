@@ -10,6 +10,7 @@ import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import kotlin.math.hypot
 
 private fun textPaint(sizePx: Float, color: Int = Color.WHITE) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -78,31 +79,59 @@ class ControlView(ctx: Context, private val c: Control, private val svc: PadServ
     }
 }
 
-/** Small draggable bubble. Tap = show the mapping overlay. Drag = move it. */
+/** Small draggable bubble. Tap = overlay on/off. Hold = edit the mapping. Drag = move it. */
 @SuppressLint("ViewConstructor")
-class HandleView(ctx: Context, private val onTap: () -> Unit, private val onMoved: (Int, Int) -> Unit) : View(ctx) {
+class HandleView(
+    ctx: Context,
+    private val active: Boolean,
+    private val onTap: () -> Unit,
+    private val onLongPress: () -> Unit,
+    private val onMoved: (Int, Int) -> Unit,
+) : View(ctx) {
     private val d = resources.displayMetrics.density
-    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(150, 20, 40, 90) }
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = if (active) Color.argb(190, 30, 130, 70) else Color.argb(150, 70, 70, 70)
+    }
+    private val slash = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(230, 60, 60); strokeWidth = 3 * d; strokeCap = Paint.Cap.ROUND
+    }
     private val text = textPaint(18 * d)
     private var downX = 0f
     private var downY = 0f
     private var dragging = false
+    private var longPressed = false
+    private val longPress = Runnable {
+        longPressed = true
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        onLongPress()
+    }
 
     override fun onDraw(canvas: Canvas) {
         val r = width / 2f
         canvas.drawCircle(r, r, r, fill)
         canvas.label("🎮", r, r, text)
+        if (!active) canvas.drawLine(r * 0.4f, r * 0.4f, r * 1.6f, r * 1.6f, slash)
     }
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> { downX = e.rawX; downY = e.rawY; dragging = false }
-            MotionEvent.ACTION_MOVE -> {
-                if (hypot(e.rawX - downX, e.rawY - downY) > 10 * d) dragging = true
-                if (dragging) onMoved(e.rawX.toInt(), e.rawY.toInt())
+            MotionEvent.ACTION_DOWN -> {
+                downX = e.rawX; downY = e.rawY; dragging = false; longPressed = false
+                postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
             }
-            MotionEvent.ACTION_UP -> if (!dragging) onTap()
+            MotionEvent.ACTION_MOVE -> {
+                if (!dragging && hypot(e.rawX - downX, e.rawY - downY) > 10 * d) {
+                    dragging = true
+                    removeCallbacks(longPress)
+                }
+                if (dragging && !longPressed) onMoved(e.rawX.toInt(), e.rawY.toInt())
+            }
+            MotionEvent.ACTION_UP -> {
+                removeCallbacks(longPress)
+                if (!dragging && !longPressed) onTap()
+            }
+            MotionEvent.ACTION_CANCEL -> removeCallbacks(longPress)
         }
         return true
     }

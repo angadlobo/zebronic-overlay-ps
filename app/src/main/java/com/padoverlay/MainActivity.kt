@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -12,6 +13,7 @@ import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
+import android.view.WindowInsets
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -24,6 +26,7 @@ import android.widget.Toast
 class MainActivity : Activity() {
     private lateinit var prefs: Prefs
     private lateinit var status: TextView
+    private lateinit var activeBox: CheckBox
     private val handler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,6 +37,8 @@ class MainActivity : Activity() {
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad, pad, pad)
+            // Take initial focus so the text field below doesn't scroll the page on open.
+            isFocusableInTouchMode = true
         }
         fun add(v: View) = col.addView(v)
         fun text(t: String, size: Float = 15f, bold: Boolean = false) = TextView(this).apply {
@@ -52,6 +57,7 @@ class MainActivity : Activity() {
         text("Pad Overlay", 24f, bold = true)
         text("Use your gamepad (e.g. Zebronics Max Link) with PS Remote Play. Each controller button taps Remote Play's own on-screen button for you.", 14f)
         status = text("", 15f, bold = true)
+        activeBox = check("Overlay active (or tap the 🎮 bubble to turn it on/off)", prefs.active) { prefs.active = it }
 
         text("Setup", 18f, bold = true)
         button("1. Turn on \"Pad Overlay\" in Accessibility") {
@@ -67,7 +73,7 @@ class MainActivity : Activity() {
             launchTarget()
             handler.postDelayed({ PadService.instance?.openEditor() }, 1200)
         }
-        text("In the mapping overlay: drag each amber ✛ onto the matching button in Remote Play. Tap a ✛ → Bind → press the controller button you want. Press any controller button to hide the overlay and play. Tap the 🎮 bubble to bring it back.", 13f)
+        text("In the mapping overlay: drag each amber ✛ onto the matching button in Remote Play. Tap a ✛ → Bind → press the controller button you want. Press any controller button to hide the overlay and play. Hold the 🎮 bubble to bring it back. Tap the bubble to turn everything on or off.", 13f)
 
         text("Options", 18f, bold = true)
         check("Read sticks, triggers and D-pad hat (recommended)", prefs.analog) { prefs.analog = it }
@@ -105,12 +111,25 @@ class MainActivity : Activity() {
                 .show()
         }
 
-        setContentView(ScrollView(this).apply { addView(col) })
+        setContentView(ScrollView(this).apply {
+            addView(col)
+            clipToPadding = false
+            // Android 15+ draws apps edge to edge: keep content clear of the system bars and keyboard.
+            setOnApplyWindowInsetsListener { v, insets ->
+                if (Build.VERSION.SDK_INT >= 30) {
+                    val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+                    val ime = insets.getInsets(WindowInsets.Type.ime())
+                    v.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+                }
+                insets
+            }
+        })
     }
 
     override fun onResume() {
         super.onResume()
         val on = PadService.instance != null
+        activeBox.isChecked = prefs.active // may have changed from the bubble
         status.text = if (on) "✅ Service is on" else "⚠️ Service is off: do step 1"
         status.setTextColor(if (on) Color.rgb(40, 160, 70) else Color.rgb(220, 120, 0))
     }

@@ -49,43 +49,74 @@ fun keyName(code: Int): String =
     if (code == 0) "—" else KeyEvent.keyCodeToString(code).removePrefix("KEYCODE_").removePrefix("BUTTON_")
 
 object Defaults {
-    /** Rough guess at Remote Play's landscape layout; you fine-tune it in the editor. */
-    fun layout(): MutableList<Control> {
+    /**
+     * Remote Play's landscape layout, measured from its UI on a 2772×1272 phone; fine-tune in the editor.
+     * L3, R3, Create, Options and PS start disabled: Remote Play has no always-visible button for
+     * them, so tapping a guessed spot would only cause stray touches. "Restore all" enables them.
+     */
+    fun layout(landscape: Boolean): MutableList<Control> {
         val list = mutableListOf<Control>()
         fun add(id: String, label: String, tx: Float, ty: Float, key: Int,
-                size: Float = 54f, kind: Kind = Kind.BUTTON, range: Float = 0f) {
+                size: Float = 54f, kind: Kind = Kind.BUTTON, range: Float = 0f, enabled: Boolean = true) {
             // Your on-screen button starts a bit toward the middle so it doesn't cover the original.
             val x = tx + (0.5f - tx) * 0.3f
             val y = ty + (0.5f - ty) * 0.3f
-            list += Control(id, label, kind, tx, ty, key, x, y, size, range)
+            list += Control(id, label, kind, tx, ty, key, x, y, size, range, enabled)
         }
-        add("cross", "✕", 0.88f, 0.62f, KeyEvent.KEYCODE_BUTTON_A)
-        add("circle", "○", 0.94f, 0.50f, KeyEvent.KEYCODE_BUTTON_B)
-        add("square", "□", 0.82f, 0.50f, KeyEvent.KEYCODE_BUTTON_X)
-        add("triangle", "△", 0.88f, 0.38f, KeyEvent.KEYCODE_BUTTON_Y)
-        add("up", "▲", 0.12f, 0.38f, KeyEvent.KEYCODE_DPAD_UP)
-        add("down", "▼", 0.12f, 0.62f, KeyEvent.KEYCODE_DPAD_DOWN)
-        add("left", "◀", 0.06f, 0.50f, KeyEvent.KEYCODE_DPAD_LEFT)
-        add("right", "▶", 0.18f, 0.50f, KeyEvent.KEYCODE_DPAD_RIGHT)
-        add("l1", "L1", 0.07f, 0.24f, KeyEvent.KEYCODE_BUTTON_L1)
-        add("r1", "R1", 0.93f, 0.24f, KeyEvent.KEYCODE_BUTTON_R1)
-        add("l2", "L2", 0.07f, 0.11f, KeyEvent.KEYCODE_BUTTON_L2)
-        add("r2", "R2", 0.93f, 0.11f, KeyEvent.KEYCODE_BUTTON_R2)
-        add("l3", "L3", 0.33f, 0.92f, KeyEvent.KEYCODE_BUTTON_THUMBL, 44f)
-        add("r3", "R3", 0.67f, 0.92f, KeyEvent.KEYCODE_BUTTON_THUMBR, 44f)
-        add("create", "Create", 0.28f, 0.08f, KeyEvent.KEYCODE_BUTTON_SELECT, 44f)
-        add("options", "Opt", 0.72f, 0.08f, KeyEvent.KEYCODE_BUTTON_START, 44f)
-        add("ps", "PS", 0.50f, 0.92f, KeyEvent.KEYCODE_BUTTON_MODE, 44f)
-        add("touchpad", "Pad", 0.50f, 0.08f, 0, 44f)
-        add("ls", "LS", 0.24f, 0.78f, 0, 120f, Kind.STICK, 45f)
-        add("rs", "RS", 0.76f, 0.78f, 0, 120f, Kind.STICK, 45f)
+        add("cross", "✕", 0.8948f, 0.7531f, KeyEvent.KEYCODE_BUTTON_A)
+        add("circle", "○", 0.9596f, 0.6120f, KeyEvent.KEYCODE_BUTTON_B)
+        add("square", "□", 0.8301f, 0.6120f, KeyEvent.KEYCODE_BUTTON_X)
+        add("triangle", "△", 0.8948f, 0.4709f, KeyEvent.KEYCODE_BUTTON_Y)
+        add("up", "▲", 0.1524f, 0.4855f, KeyEvent.KEYCODE_DPAD_UP)
+        add("down", "▼", 0.1524f, 0.7370f, KeyEvent.KEYCODE_DPAD_DOWN)
+        add("left", "◀", 0.0947f, 0.6112f, KeyEvent.KEYCODE_DPAD_LEFT)
+        add("right", "▶", 0.2101f, 0.6112f, KeyEvent.KEYCODE_DPAD_RIGHT)
+        add("l1", "L1", 0.2026f, 0.2693f, KeyEvent.KEYCODE_BUTTON_L1)
+        add("r1", "R1", 0.8481f, 0.2693f, KeyEvent.KEYCODE_BUTTON_R1)
+        add("l2", "L2", 0.1292f, 0.1466f, KeyEvent.KEYCODE_BUTTON_L2)
+        add("r2", "R2", 0.9215f, 0.1466f, KeyEvent.KEYCODE_BUTTON_R2)
+        add("l3", "L3", 0.33f, 0.92f, KeyEvent.KEYCODE_BUTTON_THUMBL, 44f, enabled = false)
+        add("r3", "R3", 0.67f, 0.92f, KeyEvent.KEYCODE_BUTTON_THUMBR, 44f, enabled = false)
+        add("create", "Create", 0.28f, 0.08f, KeyEvent.KEYCODE_BUTTON_SELECT, 44f, enabled = false)
+        add("options", "Opt", 0.72f, 0.08f, KeyEvent.KEYCODE_BUTTON_START, 44f, enabled = false)
+        add("ps", "PS", 0.50f, 0.92f, KeyEvent.KEYCODE_BUTTON_MODE, 44f, enabled = false)
+        add("touchpad", "Pad", 0.5254f, 0.1981f, 0, 44f)
+        add("ls", "LS", 0.4075f, 0.7972f, 0, 120f, Kind.STICK, 60f)
+        add("rs", "RS", 0.6434f, 0.7972f, 0, 120f, Kind.STICK, 60f)
+        if (!landscape) applyPortrait(list)
         return list
+    }
+
+    /** Remote Play's portrait layout (same phone). Create, PS and Options are always visible here. */
+    private fun applyPortrait(list: List<Control>) {
+        val at = mapOf(
+            "cross" to (0.7524f to 0.7110f), "circle" to (0.8750f to 0.6548f),
+            "square" to (0.6297f to 0.6548f), "triangle" to (0.7524f to 0.5985f),
+            "up" to (0.2476f to 0.6136f), "down" to (0.2476f to 0.6973f),
+            "left" to (0.1564f to 0.6555f), "right" to (0.3388f to 0.6555f),
+            "l1" to (0.3227f to 0.5099f), "r1" to (0.6769f to 0.5088f),
+            "l2" to (0.1730f to 0.4522f), "r2" to (0.8267f to 0.4511f),
+            "create" to (0.2264f to 0.9697f), "ps" to (0.5000f to 0.9697f), "options" to (0.7736f to 0.9697f),
+            "touchpad" to (0.5000f to 0.1804f),
+            "ls" to (0.3282f to 0.8000f), "rs" to (0.6718f to 0.7992f),
+        )
+        for (c in list) {
+            val (tx, ty) = at[c.id] ?: continue
+            c.tx = tx; c.ty = ty; c.enabled = true
+            c.x = tx + (0.5f - tx) * 0.3f
+            c.y = ty + (0.5f - ty) * 0.3f
+            if (c.kind == Kind.STICK) c.rangeDp = 36f
+        }
     }
 }
 
 class Prefs(ctx: Context) {
     private val sp = ctx.getSharedPreferences("pad", Context.MODE_PRIVATE)
 
+    /** Master switch. Off: the controller and touch buttons do nothing; only the bubble stays. */
+    var active: Boolean
+        get() = sp.getBoolean("active", true)
+        set(v) = sp.edit().putBoolean("active", v).apply()
     var opacity: Int
         get() = sp.getInt("opacity", 60)
         set(v) = sp.edit().putInt("opacity", v).apply()
@@ -126,12 +157,12 @@ class Prefs(ctx: Context) {
     private fun key(landscape: Boolean) = if (landscape) "layout_land" else "layout_port"
 
     fun loadLayout(landscape: Boolean): MutableList<Control> {
-        val s = sp.getString(key(landscape), null) ?: return Defaults.layout()
+        val s = sp.getString(key(landscape), null) ?: return Defaults.layout(landscape)
         return try {
             val arr = JSONArray(s)
             MutableList(arr.length()) { Control.fromJson(arr.getJSONObject(it)) }
         } catch (e: Exception) {
-            Defaults.layout()
+            Defaults.layout(landscape)
         }
     }
 
