@@ -40,6 +40,18 @@ class Gamepad(private val svc: PadService, private val injector: Injector) {
         return press(e.keyCode, e.action == KeyEvent.ACTION_DOWN)
     }
 
+    /**
+     * PS controller mode: the helper sends the pad's buttons directly, except the ones bound to
+     * Create, Options or PS, which press Remote Play's own buttons. Returns false for everything
+     * else, including the virtual controller's own keys.
+     */
+    fun onTouchButtonKey(e: KeyEvent): Boolean {
+        if (!KeyEvent.isGamepadButton(e.keyCode) || e.device?.vendorId == 0x054c) return false
+        val label = svc.systemButtonFor(e.keyCode) ?: return false
+        if (e.action == KeyEvent.ACTION_DOWN && e.repeatCount == 0) svc.pressByLabel(label)
+        return true
+    }
+
     private fun press(code: Int, down: Boolean): Boolean {
         learn?.let { cb ->
             if (down) { learn = null; cb(code) }
@@ -47,6 +59,11 @@ class Gamepad(private val svc: PadService, private val injector: Injector) {
         }
         if (down) svc.onControllerUsed()
         if (!svc.playing) return true
+        // Create, PS and Options may be hidden in a panel, so they're looked up when pressed.
+        svc.systemButtonFor(code)?.let { label ->
+            if (down) svc.pressByLabel(label)
+            return true
+        }
         val c = svc.controlFor(code) ?: return true
         if (down) {
             if (!heldKeys.containsKey(code)) heldKeys[code] = injector.down(svc.px(c), svc.py(c))

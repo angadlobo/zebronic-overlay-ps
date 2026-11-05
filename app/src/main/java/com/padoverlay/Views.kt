@@ -6,7 +6,9 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
 import android.graphics.Paint
+import android.os.Build
 import android.view.HapticFeedbackConstants
+import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -144,6 +146,12 @@ class HandleView(
 @SuppressLint("ViewConstructor")
 class CatcherView(ctx: Context, private val svc: PadService) : View(ctx) {
     init { isFocusable = true; isFocusableInTouchMode = true }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        // Deliver stick movement as it happens rather than batching it to the next frame.
+        if (Build.VERSION.SDK_INT >= 30) requestUnbufferedDispatch(InputDevice.SOURCE_JOYSTICK)
+    }
 
     override fun onGenericMotionEvent(e: MotionEvent) = svc.gamepad.onMotion(e) || super.onGenericMotionEvent(e)
 

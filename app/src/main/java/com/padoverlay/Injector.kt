@@ -6,6 +6,7 @@ import android.accessibilityservice.GestureDescription.StrokeDescription
 import android.graphics.Path
 import android.os.Handler
 import android.os.Looper
+import kotlin.math.abs
 
 /**
  * Multi-finger touch injector built on AccessibilityService.dispatchGesture.
@@ -19,6 +20,8 @@ import android.os.Looper
 class Injector(private val svc: AccessibilityService) {
 
     private class Finger(var x: Float, var y: Float) {
+        val startX = x
+        val startY = y
         var stroke: StrokeDescription? = null
         var sentX = 0f
         var sentY = 0f
@@ -40,8 +43,12 @@ class Injector(private val svc: AccessibilityService) {
 
     fun move(id: Int, x: Float, y: Float) {
         val f = fingers[id] ?: return
-        f.x = x.coerceAtLeast(0f)
-        f.y = y.coerceAtLeast(0f)
+        val nx = x.coerceAtLeast(0f)
+        val ny = y.coerceAtLeast(0f)
+        // Ignore stick noise: each gesture sent delays the next one, including button presses.
+        if (abs(nx - f.x) < MIN_MOVE_PX && abs(ny - f.y) < MIN_MOVE_PX) return
+        f.x = nx
+        f.y = ny
         kick()
     }
 
@@ -73,7 +80,10 @@ class Injector(private val svc: AccessibilityService) {
             val prev = f.stroke
             val path = Path()
             val stroke = if (prev == null) {
-                path.moveTo(f.x, f.y)
+                // Start where the finger first landed, even if it has already moved while another
+                // gesture was in flight: otherwise a stick is grabbed off-centre and doesn't deflect.
+                path.moveTo(f.startX, f.startY)
+                if (f.startX != f.x || f.startY != f.y) path.lineTo(f.x, f.y)
                 if (f.released) StrokeDescription(path, 0, TAP_MS, false)
                 else StrokeDescription(path, 0, STEP_MS, true)
             } else {
@@ -108,7 +118,8 @@ class Injector(private val svc: AccessibilityService) {
     }
 
     companion object {
-        private const val STEP_MS = 8L
+        private const val STEP_MS = 4L
+        private const val MIN_MOVE_PX = 2f
         private const val TAP_MS = 40L
         private val MAX_FINGERS = GestureDescription.getMaxStrokeCount()
     }

@@ -12,6 +12,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.InputDevice
 import android.view.View
 import android.view.WindowInsets
 import android.widget.Button
@@ -57,7 +58,9 @@ class MainActivity : Activity() {
         text("Pad Overlay", 24f, bold = true)
         text("Use your gamepad (e.g. Zebronics Max Link) with PS Remote Play. Each controller button taps Remote Play's own on-screen button for you.", 14f)
         status = text("", 15f, bold = true)
-        activeBox = check("Overlay active (or tap the 🎮 bubble to turn it on/off)", prefs.active) { prefs.active = it }
+        activeBox = check("Overlay active (or tap the 🎮 bubble to turn it on/off)", prefs.active) {
+            if (it != prefs.active) { prefs.active = it; PadService.instance?.setActive(it) }
+        }
 
         text("Setup", 18f, bold = true)
         button("1. Turn on \"Pad Overlay\" in Accessibility") {
@@ -130,8 +133,15 @@ class MainActivity : Activity() {
         super.onResume()
         val on = PadService.instance != null
         activeBox.isChecked = prefs.active // may have changed from the bubble
-        status.text = if (on) "✅ Service is on" else "⚠️ Service is off: do step 1"
-        status.setTextColor(if (on) Color.rgb(40, 160, 70) else Color.rgb(220, 120, 0))
+        val ps = InputDevice.getDeviceIds().any { id ->
+            InputDevice.getDevice(id)?.let { it.vendorId == 0x054c && it.productId == 0x0ce6 } == true
+        }
+        status.text = when {
+            ps -> "🎮 PS controller mode is running: the overlay isn't needed"
+            on -> "✅ Service is on"
+            else -> "⚠️ Service is off: do step 1"
+        }
+        status.setTextColor(if (on || ps) Color.rgb(40, 160, 70) else Color.rgb(220, 120, 0))
     }
 
     private fun launchTarget() {

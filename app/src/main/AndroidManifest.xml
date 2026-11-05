@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Only used to reach the PS controller helper on this phone (127.0.0.1). -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Lets us find and launch PS Remote Play / the PS App on Android 11+. -->
     <queries>

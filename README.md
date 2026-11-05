@@ -5,7 +5,18 @@ Use a third-party Bluetooth gamepad (made for a **Zebronics Max Link**, but any 
 Remote Play only accepts official DualShock/DualSense controllers. Pad Overlay sits on top of Remote Play
 and turns each controller button into a tap on Remote Play's own on-screen button. Sticks become drags.
 
-## How it works
+## PS controller mode (recommended)
+Your gamepad appears to Remote Play as a DualSense, with no overlay or fake touches, so every button is a real button. It needs no root, but it does need adb once after each phone restart, because only the adb shell may create the virtual device.
+
+1. Connect the gamepad to the phone over USB (Bluetooth isn't working yet), install the APK, and turn on USB debugging.
+2. Plug the phone into your computer and run `scripts/pad-bridge.sh`. You can unplug afterwards.
+3. Open Remote Play and play. To stop, run `scripts/pad-bridge.sh stop`.
+
+PS, Options and Create are pressed as touches on Remote Play's own on-screen buttons (the app brings them back if Remote Play has hidden them). Some pads, like the Zebronics, never send a PS button at all. To choose which pad button does each one, hold the 🎮 bubble, tap its ✛, tap **Bind**, press the pad button, then **Save ✓**.
+
+The 🎮 bubble stays on screen: tap it to turn the PS controller on or off without the computer. The rest of the overlay stays out of the way while this is running. Rumble and motion aren't passed through. This changes how Remote Play sees your controller, so check you're comfortable with Sony's terms of use.
+
+## How the overlay works
 - An **Accessibility service** reads your gamepad buttons and performs touch gestures (multi-finger, so you can hold a stick and press ✕ at the same time).
 - A **mapping overlay** lets you drag an amber ✛ onto each Remote Play button and bind a controller button to it.
 - **Press any button on the controller** and the overlay hides itself, saves, and you're playing.
