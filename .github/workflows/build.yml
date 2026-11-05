@@ -1,7 +1,10 @@
 name: Build APK
 on:
   push:
+    branches: [main]
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -13,7 +16,17 @@ jobs:
           java-version: 17
       - name: Build
         run: chmod +x gradlew && ./gradlew assembleRelease --no-daemon
+      - name: Rename APK
+        run: cp app/build/outputs/apk/release/*.apk PadOverlay.apk
       - uses: actions/upload-artifact@v4
         with:
           name: PadOverlay-apk
-          path: app/build/outputs/apk/release/*.apk
+          path: PadOverlay.apk
+      - name: Publish release (direct download link)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest PadOverlay.apk \
+            --title "Pad Overlay (latest build)" \
+            --notes "Download PadOverlay.apk below and open it on your phone to install. Built from ${GITHUB_SHA::7}."

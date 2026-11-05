@@ -12,7 +12,7 @@ and turns each controller button into a tap on Remote Play's own on-screen butto
 - Optional: on-screen touch buttons you can move and resize anywhere (Settings → "Also show on-screen touch buttons").
 
 ## Build the APK
-**Option A: GitHub (no PC setup).** Push this folder to a GitHub repo. The included workflow (`.github/workflows/build.yml`) builds the APK. Download it from the run's *Artifacts* section.
+**Option A: Direct download.** Open https://github.com/angadlobo/zebronic-overlay-ps/releases/latest/download/PadOverlay.apk on your phone. Every push to `main` rebuilds it.
 
 **Option B: Android Studio.** Open the folder and choose Build → Build APK(s).
 
