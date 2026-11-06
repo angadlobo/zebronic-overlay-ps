@@ -246,7 +246,7 @@ class PadService : AccessibilityService() {
 
     /** A real DualSense (or the virtual one) is connected, so Remote Play needs no help from us. */
     private fun nativeControllerPresent() = InputDevice.getDeviceIds().any { id ->
-        InputDevice.getDevice(id)?.let { it.vendorId == 0x054c && it.productId == 0x0ce6 } == true
+        InputDevice.getDevice(id)?.let { it.vendorId == 0x054c && it.productId in PS_CONTROLLER_IDS } == true
     }
     fun controlById(id: String) = controls.firstOrNull { it.enabled && it.id == id }
 

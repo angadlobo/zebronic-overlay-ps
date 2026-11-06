@@ -134,7 +134,7 @@ class MainActivity : Activity() {
         val on = PadService.instance != null
         activeBox.isChecked = prefs.active // may have changed from the bubble
         val ps = InputDevice.getDeviceIds().any { id ->
-            InputDevice.getDevice(id)?.let { it.vendorId == 0x054c && it.productId == 0x0ce6 } == true
+            InputDevice.getDevice(id)?.let { it.vendorId == 0x054c && it.productId in PS_CONTROLLER_IDS } == true
         }
         status.text = when {
             ps -> "🎮 PS controller mode is running: the overlay isn't needed"

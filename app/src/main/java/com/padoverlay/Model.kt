@@ -178,3 +178,6 @@ class Prefs(ctx: Context) {
         const val DEFAULT_PACKAGES = "com.playstation.remoteplay, com.scee.psxandroid"
     }
 }
+
+/** Sony product IDs Remote Play treats as PS controllers: DualSense, DualShock 4 (v1, v2). */
+val PS_CONTROLLER_IDS = setOf(0x0ce6, 0x05c4, 0x09cc)

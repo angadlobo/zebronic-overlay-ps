@@ -32,12 +32,13 @@ object Bridge {
 
     private const val SONY = 0x054c
     private const val DUALSENSE = 0x0ce6
+    private const val DUALSHOCK4 = 0x09cc
 
     private const val EV_SYN = 0
     private const val EV_KEY = 1
     private const val EV_ABS = 3
 
-    /** Just enough for the driver: it reads raw reports by id and size, not through this descriptor. */
+    /** DualSense: just enough for hid-playstation, which reads raw reports by id and size. */
     private val DESCRIPTOR = intArrayOf(
         0x06, 0x00, 0xFF, 0x09, 0x01, 0xA1, 0x01,
         0x85, 0x01, 0x15, 0x00, 0x26, 0xFF, 0x00, 0x75, 0x08, 0x95, 0x3F, 0x09, 0x01, 0x81, 0x02, // input
@@ -47,6 +48,30 @@ object Bridge {
         0x85, 0x20, 0x95, 0x3F, 0x09, 0x05, 0xB1, 0x02, // firmware info
         0xC0,
     ).map { it.toByte() }.toByteArray()
+
+    /**
+     * DualShock 4 (USB layout), for older kernels that only have hid-sony. That driver maps the
+     * controls from this descriptor, so its usages follow a real DS4's report 1.
+     */
+    private val DS4_DESCRIPTOR = intArrayOf(
+        0x05, 0x01, 0x09, 0x05, 0xA1, 0x01, 0x85, 0x01,
+        0x09, 0x30, 0x09, 0x31, 0x09, 0x32, 0x09, 0x35, // sticks: X, Y, Z (right X), Rz (right Y)
+        0x15, 0x00, 0x26, 0xFF, 0x00, 0x75, 0x08, 0x95, 0x04, 0x81, 0x02,
+        0x09, 0x39, 0x15, 0x00, 0x25, 0x07, 0x35, 0x00, 0x46, 0x3B, 0x01, 0x65, 0x14, // hat
+        0x75, 0x04, 0x95, 0x01, 0x81, 0x42, 0x65, 0x00, 0x45, 0x00,
+        0x05, 0x09, 0x19, 0x01, 0x29, 0x0E, 0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95, 0x0E, 0x81, 0x02, // 14 buttons
+        0x06, 0x00, 0xFF, 0x09, 0x20, 0x75, 0x06, 0x95, 0x01, 0x25, 0x7F, 0x81, 0x02, // counter
+        0x05, 0x01, 0x09, 0x33, 0x09, 0x34, 0x26, 0xFF, 0x00, 0x75, 0x08, 0x95, 0x02, 0x81, 0x02, // L2, R2
+        0x06, 0x00, 0xFF, 0x09, 0x21, 0x95, 0x36, 0x81, 0x02, // motion, touchpad, battery
+        0x85, 0x05, 0x09, 0x22, 0x95, 0x1F, 0x91, 0x02, // output (rumble, light bar)
+        0x85, 0x02, 0x09, 0x24, 0x95, 0x24, 0xB1, 0x02, // calibration
+        0x85, 0x81, 0x09, 0x25, 0x95, 0x06, 0xB1, 0x02, // MAC address
+        0x85, 0xA3, 0x09, 0x26, 0x95, 0x30, 0xB1, 0x02, // version info
+        0xC0,
+    ).map { it.toByte() }.toByteArray()
+
+    /** Older kernels (e.g. 4.19 on a Xiaomi Pad 6) have no DualSense driver, so pose as a DS4. */
+    private var ds4 = false
 
     private lateinit var uhid: FileDescriptor
     private val lock = Any()
@@ -65,12 +90,13 @@ object Bridge {
     @JvmStatic
     fun main(args: Array<String>) {
         verbose = "--log" in args // print every button and trigger event, to diagnose a pad's layout
+        ds4 = !java.io.File("/sys/bus/hid/drivers/playstation").exists()
         uhid = Os.open("/dev/uhid", OsConstants.O_RDWR or OsConstants.O_CLOEXEC, 0)
         createDevice()
         thread(name = "uhid") { serveDriver() }
         Thread.sleep(500)
         send()
-        println("bridge: virtual DualSense created")
+        println("bridge: virtual ${if (ds4) "DualShock 4" else "DualSense"} created")
         thread(name = "control") { serveControl() }
         while (true) {
             scan()
@@ -123,11 +149,13 @@ object Bridge {
     private fun createDevice() {
         val b = le(UHID_EVENT_SIZE)
         b.putInt(UHID_CREATE2)
-        b.put("DualSense Wireless Controller".toByteArray()); b.position(4 + 128 + 64 + 64)
-        b.putShort(DESCRIPTOR.size.toShort())
+        val descriptor = if (ds4) DS4_DESCRIPTOR else DESCRIPTOR
+        b.put((if (ds4) "Wireless Controller" else "DualSense Wireless Controller").toByteArray())
+        b.position(4 + 128 + 64 + 64)
+        b.putShort(descriptor.size.toShort())
         b.putShort(3) // BUS_USB
-        b.putInt(SONY); b.putInt(DUALSENSE); b.putInt(0x8000); b.putInt(0)
-        b.put(DESCRIPTOR)
+        b.putInt(SONY); b.putInt(if (ds4) DUALSHOCK4 else DUALSENSE); b.putInt(if (ds4) 0x0100 else 0x8000); b.putInt(0)
+        b.put(descriptor)
         Os.write(uhid, b.array(), 0, UHID_EVENT_SIZE)
     }
 
@@ -159,7 +187,7 @@ object Bridge {
         }
     }
 
-    private fun featureReport(id: Int): ByteArray? = when (id) {
+    private fun featureReport(id: Int): ByteArray? = if (ds4) ds4FeatureReport(id) else when (id) {
         0x05 -> le(41).apply {
             put(5)
             repeat(3) { putShort(0) } // gyro bias
@@ -175,9 +203,23 @@ object Bridge {
         else -> null
     }
 
+    private fun ds4FeatureReport(id: Int): ByteArray? = when (id) {
+        0x02 -> le(37).apply {
+            put(2)
+            repeat(3) { putShort(0) } // gyro bias
+            repeat(3) { putShort(8192); putShort(-8192) } // gyro range
+            repeat(2) { putShort(540) } // gyro speed
+            repeat(3) { putShort(8192); putShort(-8192) } // accelerometer range
+        }.array()
+        0x81 -> byteArrayOf(0x81.toByte(), 0xBC.toByte(), 0x9A.toByte(), 0x78, 0x56, 0x34, 0x12)
+        0xA3 -> ByteArray(49).also { it[0] = 0xA3.toByte(); it[35] = 0x01; it[41] = 0x01 }
+        else -> null
+    }
+
     /** Must be called with lock held, or before reader threads start. */
     private fun send() {
         if (!enabled) return
+        if (ds4) { sendDs4(); return }
         val r = ByteArray(64)
         r[0] = 1
         for (i in axes.indices) r[1 + i] = axes[i].toByte()
@@ -192,6 +234,27 @@ object Bridge {
         r[33] = 0x80.toByte() // no finger on the touchpad
         r[37] = 0x80.toByte()
         r[53] = 0x1A // charging, full: the pad's real battery isn't known
+        val out = le(6 + r.size)
+        out.putInt(UHID_INPUT2); out.putShort(r.size.toShort()); out.put(r)
+        Os.write(uhid, out.array(), 0, out.capacity())
+    }
+
+    private fun sendDs4() {
+        val r = ByteArray(64)
+        r[0] = 1
+        for (i in 0..3) r[1 + i] = axes[i].toByte()
+        r[5] = (hat() or
+            bit(Button.SQUARE, 4) or bit(Button.CROSS, 5) or bit(Button.CIRCLE, 6) or bit(Button.TRIANGLE, 7)).toByte()
+        r[6] = (bit(Button.L1, 0) or bit(Button.R1, 1) or
+            (if (axes[4] > 0 || Button.L2 in pressed) 1 shl 2 else 0) or
+            (if (axes[5] > 0 || Button.R2 in pressed) 1 shl 3 else 0) or
+            bit(Button.CREATE, 4) or bit(Button.OPTIONS, 5) or bit(Button.L3, 6) or bit(Button.R3, 7)).toByte()
+        r[7] = (bit(Button.PS, 0) or ((seq++ and 0x3F) shl 2)).toByte()
+        r[8] = axes[4].toByte()
+        r[9] = axes[5].toByte()
+        r[30] = 0x1B // cable connected, battery full
+        r[35] = 0x80.toByte() // no finger on the touchpad
+        r[39] = 0x80.toByte()
         val out = le(6 + r.size)
         out.putInt(UHID_INPUT2); out.putShort(r.size.toShort()); out.put(r)
         Os.write(uhid, out.array(), 0, out.capacity())
@@ -271,7 +334,7 @@ object Bridge {
             val name = Regex("name:\\s+\"(.*)\"").find(block)?.groupValues?.get(1) ?: ""
             val vendor = Regex("vendor\\s+([0-9a-f]{4})").find(block)?.groupValues?.get(1)?.toInt(16)
             val product = Regex("product\\s+([0-9a-f]{4})").find(block)?.groupValues?.get(1)?.toInt(16)
-            if (vendor == SONY && product == DUALSENSE) continue // that's us
+            if (vendor == SONY && (product == DUALSENSE || product == DUALSHOCK4)) continue // that's us
             val pad = Pad(path, name)
             var section = ""
             for (line in block.lines()) {
